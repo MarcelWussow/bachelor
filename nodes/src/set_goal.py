@@ -32,8 +32,8 @@ def main():
     rospy.init_node("map_navigation_publisher", anonymous=False)
     goal_publisher = rospy.Publisher("goal_pose", PoseStamped, queue_size=10)
 
-    x_goal = 7.5
-    y_goal = 3
+    x_goal = 8
+    y_goal = 10
 
     rate = rospy.Rate(1)  # Publish rate in Hz
 
