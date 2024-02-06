@@ -25,7 +25,7 @@ def main():
 
     rospy.loginfo(f"Sending goal location: ({x_goal}, {y_goal})")
     goal_publisher.publish(goal_msg)
-
+    rospy.sleep(5) 
     rospy.spin()
 
 if __name__ == "__main__":
