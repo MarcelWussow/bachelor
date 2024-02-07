@@ -10,6 +10,4 @@
 		<param name="y_goal" value="10"/>
 	</node>
 
-	
-
 </launch>
