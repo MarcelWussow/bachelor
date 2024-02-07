@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>launches</name>
+  <name>bachelor_launch</name>
   <version>0.0.0</version>
   <description>The launches package</description>
 
