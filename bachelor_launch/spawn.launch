@@ -10,4 +10,6 @@
 		<param name="y_goal" value="10"/>
 	</node>
 
+	<node name="tuning_node" pkg="bachelor_nodes" type="tuning.py" output="screen"/>
+	
 </launch>
