@@ -6,6 +6,7 @@ from scipy.interpolate import splprep, splev #type:ignore
 from geometry_msgs.msg import PoseStamped #type:ignore
 import math #type:ignore
 
+#erstmal irrelevant
 
 class GlobalPathOptimizationNode:
     """
