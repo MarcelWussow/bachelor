@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+import rospy #type:ignore
+from nav_msgs.msg import Path #type:ignore
+from nav_msgs.msg import OccupancyGrid #type:ignore
+import numpy as np #type:ignore
+from scipy.spatial import ConvexHull #type:ignore
+from scipy.interpolate import CubicBezier #type:ignore
+
+class PathEvaluator:
+    def __init__(self):
+        rospy.init_node('path_evaluator')
+        self.optimized_path_subscriber = rospy.Subscriber('/optimized_path', Path, self.optimized_path_callback)
+        self.map_subscriber = rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
+        self.path_publisher = rospy.Publisher('/best_path', Path, queue_size=10)
+
+        # Hüllkurvenpunkte des Roboters
+        self.robot_hull = self.generate_robot_hull()
+
+        # Globale Variable für die Hinderniskarte
+        self.occupancy_grid = None
+
+        # Anzahl der alternativen Pfade
+        self.num_alternative_paths = 100
+
+    def optimized_path_callback(self, path_msg):
+        # 100 alternative Pfade erzeugen
+        alternative_paths = self.generate_alternative_paths(path_msg)
+
+        # Überprüfen, ob die Pfade gültig sind und Bewertung
+        best_path = None
+        best_evaluation = float('-inf')
+        for path in alternative_paths:
+            if self.is_valid_path(path):
+                evaluation = self.evaluate_path(path)
+                rospy.loginfo("Path evaluation: {}".format(evaluation))
+                if evaluation > best_evaluation:
+                    best_evaluation = evaluation
+                    best_path = path
+
+        rospy.loginfo("Best path evaluation: {}".format(best_evaluation))
+        rospy.loginfo("Best path: {}".format(best_path))
+
+        if best_path is not None:
+            self.path_publisher.publish(best_path)
+
+    def map_callback(self, map_msg):
+        # Aktualisieren der Hinderniskarte
+        self.occupancy_grid = map_msg
+
+    def generate_robot_hull(self):
+        # Hüllkurvenpunkte des Roboters aus den rosparam lesen
+        hull_points_param = rospy.get_param('~robot_hull_points')
+        robot_points = np.array(hull_points_param)
+        robot_hull = ConvexHull(robot_points)
+        return robot_hull
+
+    def generate_alternative_paths(self, path_msg):
+        alternative_paths = []
+        for _ in range(self.num_alternative_paths):
+            # Zufällige Punkte innerhalb der Hüllkurve generieren
+            random_points = self.generate_random_points_within_hull()
+
+            # Pfad durch Glättung der zufälligen Punkte erhalten
+            smoothed_path = self.smooth_path(random_points)
+
+            alternative_paths.append(smoothed_path)
+
+        return alternative_paths
+
+    def generate_random_points_within_hull(self):
+        # Zufällige Punkte innerhalb der Hüllkurve generieren
+        min_x, max_x = self.robot_hull.points[:, 0].min(), self.robot_hull.points[:, 0].max()
+        min_y, max_y = self.robot_hull.points[:, 1].min(), self.robot_hull.points[:, 1].max()
+
+        random_points = []
+        while len(random_points) < 10:  # Anzahl der benötigten Punkte
+            x = np.random.uniform(min_x, max_x)
+            y = np.random.uniform(min_y, max_y)
+            point = np.array([x, y])
+            if self.point_within_hull(point) and self.point_not_in_obstacle(point):
+                random_points.append(point)
+
+        return np.array(random_points)
+
+    def point_within_hull(self, point):
+        # Überprüfen, ob ein Punkt innerhalb der Hüllkurve liegt
+        return self.robot_hull.find_simplex(point) >= 0
+
+    def point_not_in_obstacle(self, point):
+        # Überprüfen, ob ein Punkt nicht in einem Hindernis liegt
+        if self.occupancy_grid is not None:
+            resolution = self.occupancy_grid.info.resolution
+            origin_x = self.occupancy_grid.info.origin.position.x
+            origin_y = self.occupancy_grid.info.origin.position.y
+            width = self.occupancy_grid.info.width
+            occupancy_data = np.array(self.occupancy_grid.data).reshape((width, width))
+            map_x = int((point[0] - origin_x) / resolution)
+            map_y = int((point[1] - origin_y) / resolution)
+            if 0 <= map_x < width and 0 <= map_y < width:
+                return occupancy_data[map_x, map_y] <= 50  # Annahme: 0-50 sind freier Raum, Werte darüber sind Hindernisse
+
+        return True
+
+    def smooth_path(self, points):
+        # Pfadglättung mit kubischen Bézierkurven der dritten Ordnung
+        smoothed_path = []
+        for i in range(len(points) - 1):
+            x = np.array([points[i][0], points[i+1][0]])
+            y = np.array([points[i][1], points[i+1][1]])
+            curve = CubicBezier(x[0], y[0], x[1], y[1])
+            t = np.linspace(0, 1, 10)  # Anzahl der Punkte auf der Bézierkurve
+            segment = np.array(curve(t)).T
+            smoothed_path.extend(segment)
+
+        return smoothed_path
+
+    def is_valid_path(self, path):
+        # Überprüfen, ob ein Pfad gültig ist (z.B. innerhalb der Hüllkurve und nicht in einem Hindernis)
+        for point in path:
+            if not self.point_within_hull(point) or not self.point_not_in_obstacle(point):
+                return False
+        return True
+
+    def evaluate_path(self, path):
+        # Pfadbewertung (Lenkwinkeländerungen bestrafen, Geradeausfahrten positiv bewerten, Pfadlänge bestrafen)
+        steering_penalty = np.sum(np.abs(np.diff(path, axis=0)))
+        straight_reward = np.sum(np.linalg.norm(np.diff(path, axis=0), axis=1))
+        path_length_penalty = len(path)
+
+         # Maximale globale x-Breite der Hüllkurve
+        max_width_x = np.ptp(self.robot_hull.points[:, 0])
+        
+        # Berechnung des optimalen Abstands
+        optimal_distance = max_width_x + 0.5
+        
+        # Bewertung des Abstands zu Hindernissen
+        obstacle_penalty = 0
+        for point in path:
+            if not self.point_not_in_obstacle(point):
+                x, y = point
+                nearest_obstacle_distance = self.nearest_obstacle_distance(x, y)
+                if nearest_obstacle_distance is not None:
+                    if nearest_obstacle_distance < optimal_distance:
+                        # Strafe für zu geringen Abstand (proportional zur Differenz)
+                        penalty = (optimal_distance - nearest_obstacle_distance) ** 2
+                        obstacle_penalty += penalty
+                    elif nearest_obstacle_distance > optimal_distance:
+                        # Strafe für zu großen Abstand (proportional zur Differenz, aber weniger streng)
+                        penalty = ((nearest_obstacle_distance - optimal_distance) / 3) ** 2
+                        obstacle_penalty += penalty
+        
+        evaluation = straight_reward - steering_penalty - path_length_penalty - obstacle_penalty
+        
+        return evaluation
+
+if __name__ == '__main__':
+    try:
+        path_evaluator = PathEvaluator()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
