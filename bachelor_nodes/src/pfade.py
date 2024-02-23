@@ -77,7 +77,7 @@ class PathEvaluator:
             x = np.random.uniform(min_x, max_x)
             y = np.random.uniform(min_y, max_y)
             point = np.array([x, y])
-            if self.point_within_hull(point) and self.point_not_in_obstacle(point):
+            if self.point_within_hull(point) and self.point_not_in_obstacle(point) and self.min_distance_to_obstacle(point):
                 random_points.append(point)
 
         return np.array(random_points)
@@ -101,6 +101,29 @@ class PathEvaluator:
 
         return True
 
+    def min_distance_to_obstacle(self, point):
+        # Überprüfen, ob ein Punkt mindestens 0,5m Abstand zu Hindernissen hat
+        if self.occupancy_grid is not None:
+            resolution = self.occupancy_grid.info.resolution
+            origin_x = self.occupancy_grid.info.origin.position.x
+            origin_y = self.occupancy_grid.info.origin.position.y
+            width = self.occupancy_grid.info.width
+            occupancy_data = np.array(self.occupancy_grid.data).reshape((width, width))
+            map_x = int((point[0] - origin_x) / resolution)
+            map_y = int((point[1] - origin_y) / resolution)
+            if 0 <= map_x < width and 0 <= map_y < width:
+                if occupancy_data[map_x, map_y] > 50:  # Wenn Punkt in Hindernis liegt
+                    return False
+                # Überprüfen des Abstands zu Hindernissen
+                for i in range(-5, 6):  # Überprüfen in einem 1m x 1m Bereich um den Punkt
+                    for j in range(-5, 6):
+                        if (map_x + i) >= 0 and (map_x + i) < width and (map_y + j) >= 0 and (map_y + j) < width:
+                            if occupancy_data[map_x + i, map_y + j] > 50:
+                                distance = np.sqrt((i * resolution) ** 2 + (j * resolution) ** 2)
+                                if distance < 0.5:
+                                    return False
+        return True
+
     def smooth_path(self, points):
         # Pfadglättung mit kubischen Bézierkurven der dritten Ordnung
         smoothed_path = []
@@ -115,9 +138,9 @@ class PathEvaluator:
         return smoothed_path
 
     def is_valid_path(self, path):
-        # Überprüfen, ob ein Pfad gültig ist (z.B. innerhalb der Hüllkurve und nicht in einem Hindernis)
+        # Überprüfen, ob ein Pfad gültig ist (z.B. innerhalb der Hüllkurve, nicht in einem Hindernis und Mindestabstand zu Hindernissen)
         for point in path:
-            if not self.point_within_hull(point) or not self.point_not_in_obstacle(point):
+            if not self.point_within_hull(point) or not self.point_not_in_obstacle(point) or not self.min_distance_to_obstacle(point):
                 return False
         return True
 
@@ -127,31 +150,33 @@ class PathEvaluator:
         straight_reward = np.sum(np.linalg.norm(np.diff(path, axis=0), axis=1))
         path_length_penalty = len(path)
 
-         # Maximale globale x-Breite der Hüllkurve
-        max_width_x = np.ptp(self.robot_hull.points[:, 0])
-        
-        # Berechnung des optimalen Abstands
-        optimal_distance = max_width_x + 0.5
-        
-        # Bewertung des Abstands zu Hindernissen
-        obstacle_penalty = 0
-        for point in path:
-            if not self.point_not_in_obstacle(point):
-                x, y = point
-                nearest_obstacle_distance = self.nearest_obstacle_distance(x, y)
-                if nearest_obstacle_distance is not None:
-                    if nearest_obstacle_distance < optimal_distance:
-                        # Strafe für zu geringen Abstand (proportional zur Differenz)
-                        penalty = (optimal_distance - nearest_obstacle_distance) ** 2
-                        obstacle_penalty += penalty
-                    elif nearest_obstacle_distance > optimal_distance:
-                        # Strafe für zu großen Abstand (proportional zur Differenz, aber weniger streng)
-                        penalty = ((nearest_obstacle_distance - optimal_distance) / 3) ** 2
-                        obstacle_penalty += penalty
-        
-        evaluation = straight_reward - steering_penalty - path_length_penalty - obstacle_penalty
+        evaluation = straight_reward - steering_penalty - path_length_penalty
         
         return evaluation
+
+    def nearest_obstacle_distance(self, x, y):
+        # Finden des nächsten Hindernisses zu einem bestimmten Punkt
+        if self.occupancy_grid is not None:
+            resolution = self.occupancy_grid.info.resolution
+            origin_x = self.occupancy_grid.info.origin.position.x
+            origin_y = self.occupancy_grid.info.origin.position.y
+            width = self.occupancy_grid.info.width
+            occupancy_data = np.array(self.occupancy_grid.data).reshape((width, width))
+            map_x = int((x - origin_x) / resolution)
+            map_y = int((y - origin_y) / resolution)
+            if 0 <= map_x < width and 0 <= map_y < width:
+                if occupancy_data[map_x, map_y] > 50:  # Wenn Punkt in Hindernis liegt
+                    return 0.0
+                min_distance = float('inf')
+                for i in range(-5, 6):  # Überprüfen in einem 1m x 1m Bereich um den Punkt
+                    for j in range(-5, 6):
+                        if (map_x + i) >= 0 and (map_x + i) < width and (map_y + j) >= 0 and (map_y + j) < width:
+                            if occupancy_data[map_x + i, map_y + j] > 50:
+                                distance = np.sqrt((i * resolution) ** 2 + (j * resolution) ** 2)
+                                if distance < min_distance:
+                                    min_distance = distance
+                return min_distance
+        return None
 
 if __name__ == '__main__':
     try:
