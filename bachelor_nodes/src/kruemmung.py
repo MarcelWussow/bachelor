@@ -2,7 +2,7 @@
 import rospy #type:ignore
 from nav_msgs.msg import Path #type:ignore
 import numpy as np #type:ignore
-from scipy.interpolate import CubicBezier #type:ignore
+from scipy.interpolate import splprep, splev #type:ignore
 from geometry_msgs.msg import PoseStamped #type:ignore
 import matplotlib.pyplot as plt #type:ignore
 
@@ -19,6 +19,8 @@ class GlobalPathOptimizationNode:
         self.global_path_subscriber = rospy.Subscriber('/global_planner/path', Path, self.global_path_callback)
         # Veröffentlichen des optimierten Pfads
         self.optimized_path_publisher = rospy.Publisher('/optimized_path', Path, queue_size=10)
+
+        rospy.sleep(10) 
 
     def global_path_callback(self, path_msg):
         path = np.array([(pose.pose.position.x, pose.pose.position.y) for pose in path_msg.poses])
@@ -89,44 +91,31 @@ class GlobalPathOptimizationNode:
         return adjusted_point
 
     def ensure_c1_continuity(self, path):
-        smoothed_path = []
-        for i in range(len(path) - 1):
-            smoothed_path.extend(self.bezier_smooth_segment(path[i], path[i + 1]))
-        smoothed_path.append(path[-1])  # Add the last point
+        # Vorbereitung der Daten für die Spline-Interpolation
+        path = np.array(path)
+        s_value = len(path) * self.smoothing_factor
+        tck, _ = splprep(path.T, k=3, s=s_value)
 
-        # Überprüfen und Glätten, um C1-Stetigkeit sicherzustellen
-        if not self.check_c1_continuity(smoothed_path):
-            smoothed_path = self.bezier_smooth_segment(smoothed_path[0], smoothed_path[-1])
+        # Neu parametrisieren des Pfads
+        u_new = np.linspace(0, 1, s_value)
+        x_new, y_new = splev(u_new, tck)
+
+        # Zusammensetzen des neuen Pfads
+        smoothed_path = np.column_stack((x_new, y_new))
 
         return smoothed_path
 
-    def bezier_smooth_segment(self, p0, p1):
-        # Bezier interpolation für den Segment
-        x = np.array([p0[0], p1[0]])
-        y = np.array([p0[1], p1[1]])
-        t = np.linspace(0, 1, self.smoothing_factor)
-        curve = CubicBezier(x[0], y[0], x[-1], y[-1], 0, 0, 0, 0)
-        smoothed_segment = curve(t)
-        return smoothed_segment
-
-    def check_c1_continuity(self, path):
-        for i in range(1, len(path) - 1):
-            p0, p1, p2 = path[i-1:i+2]
-            v1 = np.array(p1) - np.array(p0)
-            v2 = np.array(p2) - np.array(p1)
-            if not np.allclose(v1, v2):
-                return False
-        return True
     
     def plot_path(self, path):
         # Funktion zum Plotten eines Pfads mit Matplotlib
         plt.figure()
-        plt.plot([point[0] for point in path], [point[1] for point in path], 'b-', linewidth=2)
+        plt.plot(path[:,0], path[:,1], 'b-', linewidth=2)
         plt.title('Optimized Path')
         plt.xlabel('X')
         plt.ylabel('Y')
         plt.grid(True)
         plt.axis('equal')
+
 
 if __name__ == '__main__':
     try:

@@ -4,7 +4,7 @@ from nav_msgs.msg import Path #type:ignore
 from nav_msgs.msg import OccupancyGrid #type:ignore
 import numpy as np #type:ignore
 from scipy.spatial import ConvexHull #type:ignore
-from scipy.interpolate import CubicBezier #type:ignore
+from scipy.interpolate import splprep, splev #type:ignore
 import matplotlib.pyplot as plt #type:ignore
 
 class PathEvaluator:
@@ -14,14 +14,22 @@ class PathEvaluator:
         self.map_subscriber = rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         self.path_publisher = rospy.Publisher('/best_path', Path, queue_size=10)
 
+        rospy.sleep(15) 
+
         # Hüllkurvenpunkte des Roboters
         self.robot_hull = self.generate_robot_hull()
 
         # Globale Variable für die Hinderniskarte
         self.occupancy_grid = None
 
+        # Hüllkurvenpunkte und Form 
+        self.hull_points_param = rospy.get_param('~robot_hull_points')
+
         # Anzahl der alternativen Pfade
         self.num_alternative_paths = rospy.get_param('~num_alternative_paths', 100)
+        
+        # Glättungsparameter s
+        self.smoothing_factor = rospy.get_param('~smoothing_factor_pfade', 10)
 
     def optimized_path_callback(self, path_msg):
         # 100 alternative Pfade erzeugen
@@ -60,8 +68,7 @@ class PathEvaluator:
 
     def generate_robot_hull(self):
         # Hüllkurvenpunkte des Roboters aus den rosparam lesen
-        hull_points_param = rospy.get_param('~robot_hull_points')
-        robot_points = np.array(hull_points_param)
+        robot_points = np.array(self.hull_points_param)
         robot_hull = ConvexHull(robot_points)
         return robot_hull
 
@@ -136,16 +143,12 @@ class PathEvaluator:
         return True
 
     def smooth_path(self, points):
-        # Pfadglättung mit kubischen Bézierkurven der dritten Ordnung
-        smoothed_path = []
-        for i in range(len(points) - 1):
-            x = np.array([points[i][0], points[i+1][0]])
-            y = np.array([points[i][1], points[i+1][1]])
-            curve = CubicBezier(x[0], y[0], x[1], y[1])
-            t = np.linspace(0, 1, 10)  # Anzahl der Punkte auf der Bézierkurve
-            segment = np.array(curve(t)).T
-            smoothed_path.extend(segment)
-
+        # Pfadglättung mit kubischen B-Splines
+        points = np.array(points)
+        tck, _ = splprep(points.T, k=3, s=self.smoothing_factor)
+        u_new = np.linspace(0, 1, len(points) * 10)
+        smoothed_path = splev(u_new, tck)
+        smoothed_path = np.array(smoothed_path).T
         return smoothed_path
 
     def is_valid_path(self, path):
@@ -192,7 +195,7 @@ class PathEvaluator:
     def plot_path(self, path, title):
         # Funktion zum Plotten eines Pfads mit Matplotlib
         plt.figure()
-        plt.plot([point[0] for point in path], [point[1] for point in path], 'b-', linewidth=2)
+        plt.plot(path[:, 0], path[:, 1], 'b-', linewidth=2)
         plt.title(title)
         plt.xlabel('X')
         plt.ylabel('Y')

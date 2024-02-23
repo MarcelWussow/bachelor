@@ -10,19 +10,20 @@
 		<param name="y_goal" value="10"/>
 	</node>
 
-    <!-- Node 1: Glättung durch Bezier-3. Ordnung und Minimalen Radius -->
+	 <!-- Node 1: Glättung durch Bezier-3. Ordnung und Minimalen Radius -->
     <node name="kruemmung_node" pkg="bachelor_nodes" type="kruemmung.py" output="screen">
          <!-- Setze die Parameter für die Fahrzeugdynamik -->
     	<param name="robot_radius" type="double" value="0.5"/> <!-- Roboter-Radius in Metern -->
         <param name="max_steering_angle" type="double" value="0.785398"/> <!-- Maximaler Lenkwinkel in Radiant (45 Grad) -->
-        <param name="smoothing_factor" type="int" value="10"/> <!-- s-Wert für Bezier -->
+        <param name="smoothing_factor" type="int" value="10"/> <!-- s-Wert für B-Spline -->
     </node>
 
 	<!-- Node 2: Pfade -->
     <node name="pfade_node" pkg="bachelor_nodes" type="pfade.py" output="screen">
 	<!-- Definiere die Hüllkurve -->
 		<param name="robot_hull_points" value="[[0, 0], [1, 0], [1, 1], [0, 1]]"/> <!-- Rechteck-Formation-->
-        <param name="num_alternative_paths" type="int" value="100"/>
+        <param name="num_alternative_paths" type="int" value="100"/> <!-- Anzahl der random Pfade-->
+		<param name="smoothing_factor_pfade" type="int" value="10"/> <!-- s-Wert für B-Spline -->
 	</node>
 	
 </launch>
