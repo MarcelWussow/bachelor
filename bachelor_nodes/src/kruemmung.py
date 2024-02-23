@@ -4,6 +4,7 @@ from nav_msgs.msg import Path #type:ignore
 import numpy as np #type:ignore
 from scipy.interpolate import CubicBezier #type:ignore
 from geometry_msgs.msg import PoseStamped #type:ignore
+import matplotlib.pyplot as plt #type:ignore
 
 class GlobalPathOptimizationNode:
     def __init__(self):
@@ -42,6 +43,9 @@ class GlobalPathOptimizationNode:
             optimized_path_msg.poses.append(pose)
 
         self.optimized_path_publisher.publish(optimized_path_msg)
+
+        # Anzeigen des optimierten Pfads mit Matplotlib
+        self.plot_path(smoothed_path)
 
     def identify_curve_sections(self, path):
         curve_indices = []
@@ -113,6 +117,16 @@ class GlobalPathOptimizationNode:
             if not np.allclose(v1, v2):
                 return False
         return True
+    
+    def plot_path(self, path):
+        # Funktion zum Plotten eines Pfads mit Matplotlib
+        plt.figure()
+        plt.plot([point[0] for point in path], [point[1] for point in path], 'b-', linewidth=2)
+        plt.title('Optimized Path')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.grid(True)
+        plt.axis('equal')
 
 if __name__ == '__main__':
     try:

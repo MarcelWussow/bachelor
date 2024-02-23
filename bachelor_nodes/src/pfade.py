@@ -5,6 +5,7 @@ from nav_msgs.msg import OccupancyGrid #type:ignore
 import numpy as np #type:ignore
 from scipy.spatial import ConvexHull #type:ignore
 from scipy.interpolate import CubicBezier #type:ignore
+import matplotlib.pyplot as plt #type:ignore
 
 class PathEvaluator:
     def __init__(self):
@@ -20,7 +21,7 @@ class PathEvaluator:
         self.occupancy_grid = None
 
         # Anzahl der alternativen Pfade
-        self.num_alternative_paths = 100
+        self.num_alternative_paths = rospy.get_param('~num_alternative_paths', 100)
 
     def optimized_path_callback(self, path_msg):
         # 100 alternative Pfade erzeugen
@@ -42,6 +43,16 @@ class PathEvaluator:
 
         if best_path is not None:
             self.path_publisher.publish(best_path)
+            
+            # Matplotlib-Plot des besten Pfads hinzugefügt
+            self.plot_path(best_path, 'Best Path')
+
+            # Matplotlib-Plot der alternativen Pfade hinzugefügt
+            for i, path in enumerate(alternative_paths):
+                self.plot_path(path, f'Alternative Path {i+1}')
+
+            # Matplotlib-Plot der Roboterhülle hinzugefügt
+            self.plot_hull(self.robot_hull.points, 'Robot Hull')
 
     def map_callback(self, map_msg):
         # Aktualisieren der Hinderniskarte
@@ -177,6 +188,28 @@ class PathEvaluator:
                                     min_distance = distance
                 return min_distance
         return None
+
+    def plot_path(self, path, title):
+        # Funktion zum Plotten eines Pfads mit Matplotlib
+        plt.figure()
+        plt.plot([point[0] for point in path], [point[1] for point in path], 'b-', linewidth=2)
+        plt.title(title)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.grid(True)
+        plt.axis('equal')
+
+    def plot_hull(self, points, title):
+        # Funktion zum Plotten einer Hüllkurve mit Matplotlib
+        plt.figure()
+        plt.plot(points[:, 0], points[:, 1], 'r--', linewidth=2)
+        plt.plot(points[:, 0], points[:, 1], 'ro')  # Punkte der Hüllkurve markieren
+        plt.title(title)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.grid(True)
+        plt.axis('equal')
+
 
 if __name__ == '__main__':
     try:
