@@ -28,7 +28,7 @@ def plot_path(path_msg, title):
     plt.axis('equal')
     plt.show()
 
-bag_file = 'deine_aufnahme.bag'  # Passe den Dateinamen entsprechend an
+bag_file = 'versuch.bag'  # Datei zum ausführen
 
 # Öffne die rosbag-Datei
 with rosbag.Bag(bag_file, 'r') as bag:
