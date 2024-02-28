@@ -11,9 +11,9 @@ class GlobalPathOptimizationNode:
         rospy.init_node('global_path_optimization_node')
         
         # Roboterparameter
-        self.robot_radius = rospy.get_param('~robot_radius', 0.5)
-        self.max_steering_angle = rospy.get_param('~max_steering_angle', np.pi / 4)
-        self.smoothing_factor = rospy.get_param('~smoothing_factor', 10)
+        self.robot_radius = rospy.get_param('robot_radius', 0.5)
+        self.max_steering_angle = rospy.get_param('max_steering_angle', np.pi / 4)
+        self.smoothing_factor = rospy.get_param('smoothing_factor', 10)
 
         # Abonnieren des globalen Pfads
         self.global_path_subscriber = rospy.Subscriber('/global_planner/path', Path, self.global_path_callback)
