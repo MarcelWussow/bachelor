@@ -16,14 +16,11 @@ class PathEvaluator:
 
         rospy.sleep(15) 
 
-        # Hüllkurvenpunkte des Roboters
-        self.robot_hull = self.generate_robot_hull()
-
         # Globale Variable für die Hinderniskarte
         self.occupancy_grid = None
 
         # Hüllkurvenpunkte und Form 
-        self.hull_points_param = rospy.get_param('~robot_hull_points')
+        self.robot_hull_points = np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]])   #Rechteck 2x2 m
 
         # Anzahl der alternativen Pfade
         self.num_alternative_paths = rospy.get_param('~num_alternative_paths', 100)
@@ -31,13 +28,18 @@ class PathEvaluator:
         # Glättungsparameter s
         self.smoothing_factor = rospy.get_param('~smoothing_factor_pfade', 10)
 
+        # Hüllkurvenpunkte des Roboters
+        self.robot_hull = self.generate_robot_hull()
+
     def optimized_path_callback(self, path_msg):
         # 100 alternative Pfade erzeugen
         alternative_paths = self.generate_alternative_paths(path_msg)
 
         # Überprüfen, ob die Pfade gültig sind und Bewertung
-        best_path = None
-        best_evaluation = float('-inf')
+        best_path = path_msg
+        best_evaluation = self.evaluate_path(path_msg)
+        rospy.loginfo("Optimized path evaluation: {}".format(best_evaluation))
+
         for path in alternative_paths:
             if self.is_valid_path(path):
                 evaluation = self.evaluate_path(path)
@@ -62,13 +64,16 @@ class PathEvaluator:
             # Matplotlib-Plot der Roboterhülle hinzugefügt
             self.plot_hull(self.robot_hull.points, 'Robot Hull')
 
+            # Matplotlib-Plot der globalen Hindernisse hinzugefügt
+            self.plot_global_obstacles(self.occupancy_grid)
+            
     def map_callback(self, map_msg):
         # Aktualisieren der Hinderniskarte
         self.occupancy_grid = map_msg
 
     def generate_robot_hull(self):
-        # Hüllkurvenpunkte des Roboters aus den rosparam lesen
-        robot_points = np.array(self.hull_points_param)
+        # Hüllkurvenpunkte des Roboters 
+        robot_points = np.array(self.robot_hull_points)
         robot_hull = ConvexHull(robot_points)
         return robot_hull
 
@@ -118,28 +123,12 @@ class PathEvaluator:
                 return occupancy_data[map_x, map_y] <= 50  # Annahme: 0-50 sind freier Raum, Werte darüber sind Hindernisse
 
         return True
-
-    def min_distance_to_obstacle(self, point):
-        # Überprüfen, ob ein Punkt mindestens 0,5m Abstand zu Hindernissen hat
-        if self.occupancy_grid is not None:
-            resolution = self.occupancy_grid.info.resolution
-            origin_x = self.occupancy_grid.info.origin.position.x
-            origin_y = self.occupancy_grid.info.origin.position.y
-            width = self.occupancy_grid.info.width
-            occupancy_data = np.array(self.occupancy_grid.data).reshape((width, width))
-            map_x = int((point[0] - origin_x) / resolution)
-            map_y = int((point[1] - origin_y) / resolution)
-            if 0 <= map_x < width and 0 <= map_y < width:
-                if occupancy_data[map_x, map_y] > 50:  # Wenn Punkt in Hindernis liegt
-                    return False
-                # Überprüfen des Abstands zu Hindernissen
-                for i in range(-5, 6):  # Überprüfen in einem 1m x 1m Bereich um den Punkt
-                    for j in range(-5, 6):
-                        if (map_x + i) >= 0 and (map_x + i) < width and (map_y + j) >= 0 and (map_y + j) < width:
-                            if occupancy_data[map_x + i, map_y + j] > 50:
-                                distance = np.sqrt((i * resolution) ** 2 + (j * resolution) ** 2)
-                                if distance < 0.5:
-                                    return False
+    
+    def hull_not_collide_with_obstacle(self, path):
+        # Überprüfen, ob die Hüllkurve entlang des Pfads nicht mit Hindernissen kollidiert
+        for point in path:
+            if not self.point_not_in_obstacle(point):
+                return False
         return True
 
     def smooth_path(self, points):
@@ -152,9 +141,9 @@ class PathEvaluator:
         return smoothed_path
 
     def is_valid_path(self, path):
-        # Überprüfen, ob ein Pfad gültig ist (z.B. innerhalb der Hüllkurve, nicht in einem Hindernis und Mindestabstand zu Hindernissen)
+        # Überprüfen, ob ein Pfad gültig ist (nicht in einem Hindernis, Mindestabstand zu Hindernissen und Hüllkurve nicht kollidiert mit Hindernissen)
         for point in path:
-            if not self.point_within_hull(point) or not self.point_not_in_obstacle(point) or not self.min_distance_to_obstacle(point):
+            if not self.point_within_hull(point) or not self.point_not_in_obstacle(point) or not self.min_distance_to_obstacle(point) or not self.hull_not_collide_with_obstacle(path):
                 return False
         return True
 
@@ -167,30 +156,6 @@ class PathEvaluator:
         evaluation = straight_reward - steering_penalty - path_length_penalty
         
         return evaluation
-
-    def nearest_obstacle_distance(self, x, y):
-        # Finden des nächsten Hindernisses zu einem bestimmten Punkt
-        if self.occupancy_grid is not None:
-            resolution = self.occupancy_grid.info.resolution
-            origin_x = self.occupancy_grid.info.origin.position.x
-            origin_y = self.occupancy_grid.info.origin.position.y
-            width = self.occupancy_grid.info.width
-            occupancy_data = np.array(self.occupancy_grid.data).reshape((width, width))
-            map_x = int((x - origin_x) / resolution)
-            map_y = int((y - origin_y) / resolution)
-            if 0 <= map_x < width and 0 <= map_y < width:
-                if occupancy_data[map_x, map_y] > 50:  # Wenn Punkt in Hindernis liegt
-                    return 0.0
-                min_distance = float('inf')
-                for i in range(-5, 6):  # Überprüfen in einem 1m x 1m Bereich um den Punkt
-                    for j in range(-5, 6):
-                        if (map_x + i) >= 0 and (map_x + i) < width and (map_y + j) >= 0 and (map_y + j) < width:
-                            if occupancy_data[map_x + i, map_y + j] > 50:
-                                distance = np.sqrt((i * resolution) ** 2 + (j * resolution) ** 2)
-                                if distance < min_distance:
-                                    min_distance = distance
-                return min_distance
-        return None
 
     def plot_path(self, path, title):
         # Funktion zum Plotten eines Pfads mit Matplotlib
@@ -213,6 +178,45 @@ class PathEvaluator:
         plt.grid(True)
         plt.axis('equal')
 
+    def plot_global_obstacles(self, occupancy_grid):
+        # Matplotlib-Plot der globalen Hindernisse
+        if occupancy_grid is not None:
+            resolution = occupancy_grid.info.resolution
+            origin_x = occupancy_grid.info.origin.position.x
+            origin_y = occupancy_grid.info.origin.position.y
+            width = occupancy_grid.info.width
+            height = occupancy_grid.info.height
+            occupancy_data = np.array(occupancy_grid.data).reshape((width, height))
+            grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
+            obstacles_x = origin_x + grid_x * resolution
+            obstacles_y = origin_y + grid_y * resolution
+            obstacles = np.stack((obstacles_x, obstacles_y), axis=-1)
+            obstacles = obstacles[occupancy_data > 50]  # Annahme: Werte über 50 sind Hindernisse
+            plt.plot(obstacles[:, 0], obstacles[:, 1], 'k.', markersize=1)
+
+    def plot_hull_along_path(self, path, title):
+        # Funktion zum Plotten der Hüllkurve entlang des Pfads mit Matplotlib
+        plt.figure()
+        plt.plot(path[:, 0], path[:, 1], 'b-', linewidth=2)
+        plt.plot(path[:, 0], path[:, 1], 'bo')  # Punkte des Pfads markieren
+        hull_points = self.generate_robot_hull_along_path(path)
+        plt.plot(hull_points[:, 0], hull_points[:, 1], 'r--', linewidth=2)
+        plt.plot(hull_points[:, 0], hull_points[:, 1], 'ro')  # Punkte der Hüllkurve markieren
+        plt.title(title)
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.grid(True)
+        plt.axis('equal')
+        plt.show()
+
+    def generate_robot_hull_along_path(self, path):
+        # Generiere die Hüllkurve entlang des Pfads
+        hull_points = []
+        for point in path:
+            # Berechne die Hüllkurve für den Punkt
+            robot_hull = ConvexHull(self.robot_hull_points + point)
+            hull_points.append(self.robot_hull_points[robot_hull.vertices] + point)
+        return np.concatenate(hull_points)
 
 if __name__ == '__main__':
     try:
