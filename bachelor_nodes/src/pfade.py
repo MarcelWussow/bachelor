@@ -10,6 +10,12 @@ import matplotlib.pyplot as plt #type:ignore
 class PathEvaluator:
     def __init__(self):
         rospy.init_node('path_evaluator')
+
+        # Anzahl der alternativen Pfade
+        self.num_alternative_paths = rospy.get_param('~num_alternative_paths', 100)
+        # Glättungsparameter s
+        self.smoothing_factor = rospy.get_param('~smoothing_factor_pfade', 10)
+
         self.optimized_path_subscriber = rospy.Subscriber('/optimized_path', Path, self.optimized_path_callback)
         self.map_subscriber = rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         self.path_publisher = rospy.Publisher('/best_path', Path, queue_size=10)
@@ -21,12 +27,6 @@ class PathEvaluator:
 
         # Hüllkurvenpunkte und Form 
         self.robot_hull_points = np.array([[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0]])   #Rechteck 2x2 m
-
-        # Anzahl der alternativen Pfade
-        self.num_alternative_paths = rospy.get_param('~num_alternative_paths', 100)
-        
-        # Glättungsparameter s
-        self.smoothing_factor = rospy.get_param('~smoothing_factor_pfade', 10)
 
         # Hüllkurvenpunkte des Roboters
         self.robot_hull = self.generate_robot_hull()
