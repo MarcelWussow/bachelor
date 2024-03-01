@@ -20,7 +20,7 @@ class PathEvaluator:
         self.map_subscriber = rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         self.path_publisher = rospy.Publisher('/best_path', Path, queue_size=10)
 
-        rospy.sleep(15) 
+        rospy.sleep(10) 
 
         # Globale Variable für die Hinderniskarte
         self.occupancy_grid = None
@@ -100,14 +100,17 @@ class PathEvaluator:
             x = np.random.uniform(min_x, max_x)
             y = np.random.uniform(min_y, max_y)
             point = np.array([x, y])
-            if self.point_within_hull(point) and self.point_not_in_obstacle(point) and self.min_distance_to_obstacle(point):
+            if self.point_within_hull(point) and self.point_not_in_obstacle(point):
                 random_points.append(point)
 
         return np.array(random_points)
 
     def point_within_hull(self, point):
         # Überprüfen, ob ein Punkt innerhalb der Hüllkurve liegt
-        return self.robot_hull.find_simplex(point) >= 0
+        return all(
+            np.dot(eq[:-1], point) + eq[-1] <= 0
+            for eq in self.robot_hull.equations
+        )
 
     def point_not_in_obstacle(self, point):
         # Überprüfen, ob ein Punkt nicht in einem Hindernis liegt

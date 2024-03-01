@@ -11,9 +11,14 @@
     <node name="kruemmung_node" pkg="bachelor_nodes" type="kruemmung.py" output="screen">
          <!-- Setze die Parameter für die Fahrzeugdynamik -->
     	<param name="robot_radius" type="double" value="0.5"/> <!-- Roboter-Radius in Metern -->
-        <param name="steering_angle_deg" value="45.0"/> <!-- maximaler Lenkwinkel in Grad -->
+        <param name="max_steering_angle" type="double" value="0.785398"/> <!-- Maximaler Lenkwinkel in Radiant (45 Grad) -->
         <param name="smoothing_factor" type="int" value="10"/> <!-- s-Wert für B-Spline -->
-		<param name="curve_threshold_deg" value="10.0"/> <!-- Winkel für die Beurteilung der Krümmung in Grad -->
     </node>
 
+	<!-- Node 2: Pfade -->
+    <node name="pfade_node" pkg="bachelor_nodes" type="pfade.py" output="screen">
+    	<param name="num_alternative_paths" type="int" value="100"/> <!-- Anzahl der random Pfade-->
+		<param name="smoothing_factor_pfade" type="int" value="10"/> <!-- s-Wert für B-Spline -->
+	</node>
+	
 </launch>

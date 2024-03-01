@@ -5,7 +5,6 @@ import numpy as np #type:ignore
 from scipy.interpolate import splprep, splev #type:ignore
 from geometry_msgs.msg import PoseStamped #type:ignore
 import matplotlib.pyplot as plt #type:ignore
-import math #type:ignore
 
 class GlobalPathOptimizationNode:
     def __init__(self):
@@ -35,13 +34,16 @@ class GlobalPathOptimizationNode:
         curve_indices = self.identify_curve_sections(path)
 
         # Passe Kurven mit Dubin-Modell an
-        adjusted_path = self.adjust_and_smooth_path(path, curve_indices)
+        adjusted_path = self.adjust_curves_with_dubins(path, curve_indices)
+
+        # Glätte den Pfad basierend auf C1-Stetigkeit
+        smoothed_path = self.ensure_c1_continuity(adjusted_path)
 
         # Veröffentliche den optimierten Pfad
         optimized_path_msg = Path()
         optimized_path_msg.header = path_msg.header
 
-        for point in adjusted_path:
+        for point in smoothed_path:
             pose = PoseStamped()
             pose.pose.position.x = point[0]
             pose.pose.position.y = point[1]
@@ -50,7 +52,7 @@ class GlobalPathOptimizationNode:
         self.optimized_path_publisher.publish(optimized_path_msg)
 
         # Anzeigen des optimierten Pfads mit Matplotlib
-        self.plot_path(adjusted_path)
+        self.plot_path(smoothed_path)
 
     def identify_curve_sections(self, path):
         curve_indices = []
@@ -65,35 +67,33 @@ class GlobalPathOptimizationNode:
         v1 = np.array(p1) - np.array(p0)
         v2 = np.array(p2) - np.array(p1)
         
-        # Überprüfen, ob v1 und v2 Nullvektoren sind oder sehr klein sind
-        if np.allclose(v1, 0) or np.allclose(v2, 0):
-            return 0.0  # Rückgabe eines Standardwerts, wenn v1 oder v2 Nullvektoren sind oder sehr klein sind
+        # Überprüfen, ob v1 und v2 Nullvektoren sind
+        if np.all(v1 == 0) or np.all(v2 == 0):
+            return 0.0  # Rückgabe eines Standardwerts, wenn v1 oder v2 Nullvektoren sind
         
         angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
         return angle
 
-    def adjust_and_smooth_path(self, path, curve_indices):
-        adjusted_path = []
-        for i in range(len(path)):
-            if i in curve_indices:
-                # Passe Kurven mit Dubin-Modell an
-                adjusted_curve_points = self.calculate_dubin_curve(path, i)
-                adjusted_path.extend(adjusted_curve_points)
-            else:
-                adjusted_path.append(path[i])
+    def adjust_curves_with_dubins(self, path, curve_indices):
+        adjusted_path = path.copy()
+        for i in curve_indices:
+            if i > 0 and i < len(path) - 1:
+                p0, p1, p2 = path[i-1:i+2]
+                adjusted_curve_point = self.calculate_smoothed_curve_point(p0, p1, p2)
+                adjusted_path[i] = adjusted_curve_point
+        return adjusted_path
 
-        # Glätte den Pfad basierend auf C1-Stetigkeit und Orientierung
-        smoothed_path = self.ensure_c1_continuity(adjusted_path)
-
-        return smoothed_path
-
-    def calculate_dubin_curve(self, path, curve_index):
-        p0, p1, p2 = path[curve_index - 1:curve_index + 2]
-        
-        # Berechnung der minimalen Fahrradkurvenparameter
+    def calculate_smoothed_curve_point(self, p0, p1, p2):
         v1 = np.array(p1) - np.array(p0)
-        angle = self.calculate_curvature_angle(p0, p1, p2)
-        min_turning_radius = self.robot_radius / math.sin(min(angle, self.max_steering_angle))
+        v2 = np.array(p2) - np.array(p1)
+        angle = np.arccos(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+
+        # Überprüfen, ob angle NaN ist oder distance_to_mid Null ist
+        if np.isnan(angle) or np.isinf(angle) or np.isclose(angle, 0.0):
+            # Behandlung des Falls, wenn angle NaN oder unendlich ist oder distance_to_mid Null ist
+            return p1
+        
+        min_turning_radius = self.robot_radius / np.sin(min(angle, self.max_steering_angle))
 
         # Mittelpunkt des Kreises
         mid_point = np.array(p1)
@@ -110,7 +110,7 @@ class GlobalPathOptimizationNode:
 
         # Überprüfen, ob distance_to_mid Null ist, um eine Division durch Null zu vermeiden
         if np.isclose(distance_to_mid, 0.0):
-            return [p1]  # Rückgabe von p1, wenn distance_to_mid Null ist
+            return p1  # Rückgabe von p1, wenn distance_to_mid Null ist
 
         # Skalierungsfaktor für den minimalen fahrbaren Radius
         scale_factor = min_turning_radius / distance_to_mid
@@ -118,8 +118,7 @@ class GlobalPathOptimizationNode:
         # Berechnung des korrigierten Punktes
         corrected_point = mid_point + scale_factor * p1_mid_vector
 
-        # Rückgabe der Punkte, die den Dubin-Bogen repräsentieren
-        return [p0, corrected_point, p2]
+        return corrected_point
 
     def ensure_c1_continuity(self, path):
         # Vorbereitung der Daten für die Spline-Interpolation
@@ -136,6 +135,7 @@ class GlobalPathOptimizationNode:
 
         return smoothed_path
 
+    
     def plot_path(self, path):
         # Funktion zum Plotten eines Pfads mit Matplotlib
         plt.figure()
