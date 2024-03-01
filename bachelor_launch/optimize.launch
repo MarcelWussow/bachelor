@@ -1,14 +1,11 @@
 <launch>
 	<include file="$(find match_gazebo)/launch/big_square.launch"/>
      
-	<include file="$(find mir_launch_sim)/launch/mir_200.launch"/>
-
+	<include file="$(find mir_launch_sim)/launch/mir_200.launch">
+		<arg name="global_planner" value="GlobalPlanner"/>
+    </include>
+	
 	<node type="rviz" name="rviz" pkg="rviz" args="-d $(find bachelor_rviz)/rviz/global_path.rviz"/>
-
-    <node name="map_navigation_node" pkg="bachelor_nodes" type="set_goal.py" output="screen">
-		<param name="x_goal" value="8"/>
-		<param name="y_goal" value="10"/>
-	</node>
 
 	 <!-- Node 1: Glättung durch B-Spline 3. Ordnung und Minimalen Radius -->
     <node name="kruemmung_node" pkg="bachelor_nodes" type="kruemmung.py" output="screen">
@@ -20,8 +17,8 @@
 
 	<!-- Node 2: Pfade -->
     <node name="pfade_node" pkg="bachelor_nodes" type="pfade.py" output="screen">
-        <param name="num_alternative_paths" type="int" value="100"/> <!-- Anzahl der random Pfade-->
-	<param name="smoothing_factor_pfade" type="int" value="10"/> <!-- s-Wert für B-Spline -->
+    	<param name="num_alternative_paths" type="int" value="100"/> <!-- Anzahl der random Pfade-->
+		<param name="smoothing_factor_pfade" type="int" value="10"/> <!-- s-Wert für B-Spline -->
 	</node>
 	
 </launch>

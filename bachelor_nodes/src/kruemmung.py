@@ -16,7 +16,7 @@ class GlobalPathOptimizationNode:
         self.smoothing_factor = rospy.get_param('~smoothing_factor', 10)
 
         # Abonnieren des globalen Pfads
-        self.global_path_subscriber = rospy.Subscriber('/global_planner/path', Path, self.global_path_callback)
+        self.global_path_subscriber = rospy.Subscriber('/move_base_flex/GlobalPlanner/plan', Path, self.global_path_callback)
         # Veröffentlichen des optimierten Pfads
         self.optimized_path_publisher = rospy.Publisher('/optimized_path', Path, queue_size=10)
 
