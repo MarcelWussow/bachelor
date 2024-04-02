@@ -37,18 +37,26 @@ class PathSmoothingNode:
 
     def optimize_path(self, path_poses):
         optimized_poses = [path_poses[0]]  # Keep the start point unchanged
+        angle_exceeds_threshold = False
         i = 0
         while i < len(path_poses) - 2:
             angle = self.curvature_analyzer.calculate_angle(path_poses[i], path_poses[i+1], path_poses[i+2])
             if angle > self.curvature_analyzer.threshold_angle:
+                angle_exceeds_threshold = True
+                print("Angle exceeds threshold at points:")
+                print(path_poses[i].pose.position.x, path_poses[i].pose.position.y)
+                print(path_poses[i+1].pose.position.x, path_poses[i+1].pose.position.y)
+                print(path_poses[i+2].pose.position.x, path_poses[i+2].pose.position.y)
                 spline_points = self.curvature_analyzer.spline_smoothing([path_poses[i-1], path_poses[i], path_poses[i+1], path_poses[i+2], path_poses[i+3]])
                 optimized_poses.extend(spline_points[1:-1])  # Add the smoothed points (except the first and last points)
                 i += 2  # Skip the next two points as they are already covered
             else:
-                optimized_poses.append(path_poses[i+1])  # Add the next point
                 i += 1
-        optimized_poses.append(path_poses[-1])  # Keep the end point unchanged
-        return optimized_poses
+        if angle_exceeds_threshold:
+            return optimized_poses
+        else:
+            print("Winkel kleiner")
+            return path_poses
 
     def plot_paths(self, original_path, direct_path, optimized_path):
         original_x = [pose.pose.position.x for pose in original_path.poses]
@@ -124,9 +132,9 @@ class CurvatureAnalysis:
         y = np.array([pose.pose.position.y for pose in points])
 
         # Glättung mit B-Splines
-        tck, _ = splprep([x, y], k=3)
-        u = np.linspace(0, 1, num=50, endpoint=True)
-        spline_points = splev(u, tck)
+        tck, u = splprep([x, y], s=0.5)  
+        u_new = np.linspace(u.min(), u.max(), 1000)
+        spline_points = splev(u_new, tck)
         spline_pose_list = [PoseStamped() for _ in range(len(spline_points[0]))]
         for i in range(len(spline_pose_list)):
             spline_pose_list[i].pose.position.x = spline_points[0][i]
