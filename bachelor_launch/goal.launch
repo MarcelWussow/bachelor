@@ -1,6 +1,7 @@
 <launch>
     <node name="map_navigation_node" pkg="bachelor_nodes" type="set_goal.py" output="screen">
-        <param name="x_goal" value="9"/>
-        <param name="y_goal" value="10"/>
+        <param name="x_goal" value="7"/>
+        <param name="y_goal" value="-6.5"/>
+        <!-- Testpunkt 1 = (9/10), TP 2 = (6.5/-10), TP 3 = (7/-6.5)-->
     </node>
 </launch>

@@ -7,7 +7,7 @@
 	
 	<node type="rviz" name="rviz" pkg="rviz" args="-d $(find bachelor_rviz)/rviz/global_path.rviz"/>
 
-	 <!-- Node 1: Glättung durch B-Spline 3. Ordnung und Minimalen Radius -->
+	 <!-- Douglas-Peucker-->
     <node name="douglas_peucker_node" pkg="bachelor_nodes" type="douglas-peucker.py" output="screen">
     </node>
 

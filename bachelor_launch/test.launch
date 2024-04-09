@@ -7,8 +7,8 @@
 	
 	<node type="rviz" name="rviz" pkg="rviz" args="-d $(find bachelor_rviz)/rviz/global_path.rviz"/>
 
-	 <!-- Node 1: Glättung durch B-Spline 3. Ordnung -->
-    <node name="kruemmung_node" pkg="bachelor_nodes" type="kruemmung.py" output="screen">
+	 <!-- Glättung durch B-Spline 3. Ordnung -->
+    <node name="spline_node" pkg="bachelor_nodes" type="b-spline.py" output="screen">
     </node>
 
 </launch>
