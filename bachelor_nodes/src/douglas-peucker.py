@@ -47,13 +47,15 @@ class DouglasPeucker:
         x2, y2 = p2.pose.position.x, p2.pose.position.y
         x, y = p.pose.position.x, p.pose.position.y
 
-        numer = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1)
-        denom = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
-        return numer / denom
+        #Betrag Kreuzprodukt der Vektoren p1->p2 und p1->p (Flächeninhalt Parallelogramm) Satz von Gauß
+        numer = abs((y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1) 
+        #Länge des Vektors p1->p2 Pythagoras
+        denom = sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2) 
+        return numer / denom #Abstand P zur Linie p1->p2, ergibt den Abstand d
 
     def simplify(self, point_list):
         # Implementierung des Douglas-Peucker-Algorithmus auf die Punktliste
-        if len(point_list) < 3:
+        if len(point_list) < 3: 
             return point_list
 
         # Finden des Punktes mit der größten Entfernung
@@ -68,7 +70,7 @@ class DouglasPeucker:
                 index = i
                 dmax = d
 
-        # Überprüfen, ob die maximale Entfernung größer als das Epsilon ist
+        # Überprüfen ob die maximale Entfernung größer als das Epsilon ist
         if dmax > self.epsilon:
             # Rekursiv den Algorithmus auf den beiden Teilsegmenten anwenden
             left_segment = self.simplify(point_list[:index+1])
